@@ -1,0 +1,27 @@
+# Byte-compiled / compiled files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+venv/
+*.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE/editor settings
+.vscode/
+.idea/
+
+# Dependency / build artifacts
+*.egg-info/
+dist/
+build/
+
