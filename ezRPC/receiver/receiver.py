@@ -31,7 +31,6 @@ class Receiver(Server):
             enable_tls=enable_tls,
             custom_cert_file_loc=custom_cert_file_loc,
             custom_cert_key_file_loc=custom_cert_key_file_loc,
-            cert_type=cert_type,
             connection_class=ReceiverConnection,
             enable_ipv6=enable_ipv6
         )
