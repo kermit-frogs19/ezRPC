@@ -2,6 +2,16 @@ from ezRPC.receiver.receiver import Receiver
 from ezRPC.producer.producer import Producer
 from ezh3 import Client
 import asyncio
+import time
+
+try:
+    import uvloop
+
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    print("system: Using uvloop for asyncio event loop")
+except ImportError:
+    uvloop = None
+    print("system: Failed to import/connect uvloop for asyncio event loop")
 
 
 app = Receiver(
@@ -36,33 +46,16 @@ async def dummy():
 
 async def sender():
     client = Producer("https://vadim-seliukov-quic-server.com:8080", use_tls=True)
-    result = await client.call("get_sum", 1234, 1234)
-
+    result = await client.rpc.dummy()
+    print("first request made, doing the rest...")
+    start_time = time.time()
     for i in range(100):
-        await client.call("get_sum", 1234, 1234)
-
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-    result = await client.call("get_sum", 1234, 1234)
-
-    print(result)
+        await client.rpc.dummy()
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Request batch completed. Elapsed time: {elapsed_time:.2f} seconds")
     await client.close()
 
-    print("done")
 
 async def sender_server():
     client = Client("https://vadim-seliukov-quic-server.com:8000", use_tls=True)
@@ -86,8 +79,8 @@ async def sender_server():
 
 
 if __name__ == "__main__":
-    # asyncio.run(sender())
+    asyncio.run(sender())
     # asyncio.run(sender_server())
-    asyncio.run(app.run())
+    # asyncio.run(app.run())
 
 
