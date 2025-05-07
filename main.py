@@ -11,7 +11,7 @@ def print_hi(name):
 
 
 async def sender():
-    client = Client("https://vadim-seliukov-quic-server.com", use_tls=True)   # "https://vadim-seliukov-quic-server.com"
+    client = Client("https://[fe80::bb3b:fde9:23a5:1a5f%8]:8000", use_tls=False)   # "https://vadim-seliukov-quic-server.com"
     response = await client.post("/echo", headers={"User-Agent": "Vadim Seliukov"}, json={"message": "A message from Vadim"})
     response = await client.post("/echo", headers={"User-Agent": "Vadim Seliukov"}, json={"message": "A message from Vadim"})
     response = await client.post("/echo", headers={"User-Agent": "Vadim Seliukov"}, json={"message": "A message from Vadim"})

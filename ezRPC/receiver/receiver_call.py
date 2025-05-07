@@ -44,6 +44,8 @@ class ReceiverCall(ServerRequest):
 
             if "path" in headers and not self.path:
                 self.path = headers["path"]
+            if "method" in headers:
+                self.method = headers["method"]
 
         else:
             headers = {}

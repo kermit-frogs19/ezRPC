@@ -8,7 +8,7 @@ from ezRPC.receiver.receiver_call import ReceiverCall
 
 class ReceiverConnection(ServerConnection):
     def __init__(self, server, *args, **kwargs):
-        super().__init__(server=server, *args, **kwargs)
+        super().__init__(server, *args, **kwargs)
 
         self._requests: dict[int, ReceiverCall] = {}  # ✅ Stores request data (headers + body)
 

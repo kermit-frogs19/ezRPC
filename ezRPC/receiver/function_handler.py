@@ -30,7 +30,7 @@ class FunctionHandler:
         if func_name != self.function.__name__:
             raise ValueError(f"Function mismatch: expected '{self.function.__name__}', got '{func_name}'")
 
-        instance = self.cls(call.data)
+        instance = msgspec.msgpack.decode(call.data.raw, type=self.cls)
         call.data.from_msgspec_struct(instance)
 
     def build_msgspec_class(self) -> None:
@@ -41,7 +41,7 @@ class FunctionHandler:
             args_annotations.append(param.annotation)
         fields: list[tuple[str, Any]] = [
             ("f", str),
-            ("a", list[*args_annotations])
+            ("a", tuple[*args_annotations])
         ]
 
         struct_cls = msgspec.defstruct(f"{self.function.__name__.capitalize()}Args", fields=fields)
@@ -49,7 +49,7 @@ class FunctionHandler:
 
     def discover(self) -> dict:
         return {
-            "parameters": self.parameters.items(),
+            "parameters": str(self.signature),
             "await_result": self.await_result,
             "description": self.description
         }
