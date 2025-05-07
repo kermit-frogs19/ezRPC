@@ -79,8 +79,8 @@ async def sender_server():
 
 
 if __name__ == "__main__":
-    asyncio.run(sender())
+    # asyncio.run(sender())
     # asyncio.run(sender_server())
-    # asyncio.run(app.run())
+    asyncio.run(app.run())
 
 
