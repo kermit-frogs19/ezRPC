@@ -40,6 +40,7 @@ class ProducerCall(ClientRequest):
             (b":method", self.method.encode(self._header_encoding)),
             (b":scheme", self.url.scheme.encode(self._header_encoding)),
             (b":path", self.url.full_path.encode(self._header_encoding)),
+            (b":authority", self.url.authority.encode(self._header_encoding)),
             (b"content-type", self.content_type.encode(self._header_encoding))
         ]
 
