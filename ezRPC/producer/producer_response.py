@@ -18,9 +18,8 @@ class ProducerResponseData:
 
     def decode(self) -> None:
         data = msgpack.unpackb(self.raw, raw=False)
-        self.e = data["a"]
-        self.d = data["f"]
-
+        self.e = data["e"]
+        self.d = data["d"]
 
 @dataclass
 class ProducerResponse(ClientResponse):
