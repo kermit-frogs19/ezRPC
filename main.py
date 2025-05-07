@@ -6,7 +6,6 @@ import asyncio
 
 app = Receiver(
     enable_tls=True,
-    cert_type="CUSTOM",
     custom_cert_file_loc="/app/cert.pem",
     custom_cert_key_file_loc="/app/key.pem",
     port=8080,
@@ -30,8 +29,25 @@ async def get_subtraction(a: int, b: int) -> int:
     return result
 
 
+@app.function()
+async def dummy():
+    return
+
+
 async def sender():
     client = Producer("https://vadim-seliukov-quic-server.com:8080", use_tls=True)
+    result = await client.call("get_sum", 1234, 1234)
+
+    for i in range(100):
+        await client.call("get_sum", 1234, 1234)
+
+    result = await client.call("get_sum", 1234, 1234)
+    result = await client.call("get_sum", 1234, 1234)
+    result = await client.call("get_sum", 1234, 1234)
+    result = await client.call("get_sum", 1234, 1234)
+    result = await client.call("get_sum", 1234, 1234)
+    result = await client.call("get_sum", 1234, 1234)
+    result = await client.call("get_sum", 1234, 1234)
     result = await client.call("get_sum", 1234, 1234)
     result = await client.call("get_sum", 1234, 1234)
     result = await client.call("get_sum", 1234, 1234)
@@ -72,7 +88,6 @@ async def sender_server():
 if __name__ == "__main__":
     # asyncio.run(sender())
     # asyncio.run(sender_server())
-
     asyncio.run(app.run())
 
 
