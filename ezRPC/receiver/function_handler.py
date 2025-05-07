@@ -49,9 +49,9 @@ class FunctionHandler:
 
     def discover(self) -> dict:
         return {
-            "parameters": str(self.signature),
-            "await_result": self.await_result,
-            "description": self.description
+            "parameters": {k: v.annotation.__name__ for k, v in self.signature.parameters.items()},
+            "description": self.description,
+            "return": str(self.signature.return_annotation.__name__)
         }
 
     async def call(self, call: ReceiverCall) -> ReceiverResponse:
