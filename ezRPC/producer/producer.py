@@ -27,7 +27,7 @@ class Producer(Client):
             use_tls=use_tls,
             timeout=timeout
         )
-        self.function = StubProxy(self)
+        self.rpc = StubProxy(self)
 
     async def call(
             self,
