@@ -1,15 +1,15 @@
-from typing import Any
 import asyncio
+from typing import Any
+from collections import deque
+from typing import BinaryIO, Callable, Deque, Dict, List, Optional, Union, cast, Literal
+from aioquic.h3.events import DataReceived, H3Event, HeadersReceived, PushPromiseReceived
 
 from ezh3.client import *
 from ezh3.common.config import DEFAULT_TIMEOUT, _DEFAULT_TIMEOUT
 
 from ezRPC.producer.producer_call import ProducerCall, ProducerCallData
 from ezRPC.producer.producer_response import ProducerResponse, ProducerResponseData
-from typing import BinaryIO, Callable, Deque, Dict, List, Optional, Union, cast, Literal
-from collections import deque
-from aioquic.h3.events import DataReceived, H3Event, HeadersReceived, PushPromiseReceived
-
+from ezRPC.producer.stub_proxy import StubProxy
 from ezRPC.common.config import DEFAULT_PATH, DISCOVER_SYSTEM_NAME
 
 
@@ -27,6 +27,7 @@ class Producer(Client):
             use_tls=use_tls,
             timeout=timeout
         )
+        self.function = StubProxy(self)
 
     async def call(
             self,

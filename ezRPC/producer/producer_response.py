@@ -21,6 +21,7 @@ class ProducerResponseData:
         self.e = data["e"]
         self.d = data["d"]
 
+
 @dataclass
 class ProducerResponse(ClientResponse):
     method: str = field(default="POST", init=False)
