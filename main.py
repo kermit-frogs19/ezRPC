@@ -45,8 +45,11 @@ async def dummy():
 
 
 async def sender():
-    client = Producer("https://vadim-seliukov-quic-server.com:8080", use_tls=True)
+    client = Producer("https://example:8080", use_tls=True)
     result = await client.rpc.dummy()
+    result = await client.rpc.dummy()
+    result = await client.rpc.dummy()
+
     print("first request made, doing the rest...")
     start_time = time.time()
     for i in range(100):
@@ -57,30 +60,8 @@ async def sender():
     await client.close()
 
 
-async def sender_server():
-    client = Client("https://vadim-seliukov-quic-server.com:8000", use_tls=True)
-    data = {"voice": "Hellooo"}
-
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-    response = await client.post("/echo", json=data, timeout=None)
-
-    await client.close()
-    print(response)
-
-
-
 if __name__ == "__main__":
-    # asyncio.run(sender())
-    # asyncio.run(sender_server())
-    asyncio.run(app.run())
+    asyncio.run(sender())
+    # asyncio.run(app.run())
 
 
