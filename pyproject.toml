@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ezRPC"
+version = "1.0.0"
+dependencies = [
+    "aioquic",
+    "msgpack",
+    "msgspec",
+    "ezh3 @ git+https://github.com/kermit-frogs19/ezh3.git@main"
+]
