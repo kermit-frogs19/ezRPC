@@ -1,4 +1,4 @@
-from typing import Literal, Callable
+from typing import Literal, Callable, Any
 import asyncio
 import msgspec
 
@@ -21,7 +21,6 @@ class Receiver(Server):
             enable_tls: bool = False,
             custom_cert_file_loc: str = None,
             custom_cert_key_file_loc: str = None,
-            cert_type: Literal["SELF_SIGNED", "CUSTOM", None] = "SELF_SIGNED",
             enable_ipv6: bool = False,
     ) -> None:
         super().__init__(
@@ -35,15 +34,53 @@ class Receiver(Server):
             enable_ipv6=enable_ipv6
         )
         self.functions: dict[str, FunctionHandler] = {}
+        self.instances: dict[str, Any] = {}
 
-    def function(self, name: str = None, await_result: bool = True, description: str = None) -> Callable:
-        def decorator(func: Callable):
-            function_name = func.__name__ if name is None else name
-            self.functions[function_name] = FunctionHandler(
-                function=func,
+    def add_function(
+            self,
+            func:  Callable,
+            name: str = None,
+            await_result: bool = True,
+            description: str = None
+    ) -> None:
+        function_name = func.__name__ if name is None else name
+        self.functions[function_name] = FunctionHandler(
+            name=function_name,
+            function=func,
+            await_result=await_result,
+            description=description
+        )
+
+    def add_class_instance(
+            self,
+            instance: Any,
+            name: str | None = None,
+            await_result: bool = True,
+            description: str | None = None
+    ):
+        name = instance.__class__.__name__ if name is None else name
+
+        self.instances[name] = instance
+
+        methods = dir(instance)
+        for method_name in methods:
+            if method_name.startswith("_"):
+                continue
+
+            method = getattr(instance, method_name)
+            if not callable(method):
+                continue
+
+            self.add_function(
+                func=method,
+                name=f"{name}.{method.__name__}",
                 await_result=await_result,
                 description=description
             )
+
+    def function(self, name: str = None, await_result: bool = True, description: str = None) -> Callable:
+        def decorator(func: Callable):
+            self.add_function(func, name, await_result, description)
             return func
 
         return decorator

@@ -12,6 +12,7 @@ from ezRPC.receiver.receiver_response import ReceiverResponse, ReceiverResponseD
 
 @dataclass
 class FunctionHandler:
+    name: str = field(default=None)
     function: Callable = field(default=lambda: None)
     await_result: bool = field(default=True)
     description: str = field(default=None)
@@ -27,8 +28,8 @@ class FunctionHandler:
 
     def verify(self, call: ReceiverCall):
         func_name = call.get_function_name()
-        if func_name != self.function.__name__:
-            raise ValueError(f"Function mismatch: expected '{self.function.__name__}', got '{func_name}'")
+        if func_name != self.name:
+            raise ValueError(f"Function mismatch: expected '{self.name}', got '{func_name}'")
 
         instance = msgspec.msgpack.decode(call.data.raw, type=self.cls)
         call.data.from_msgspec_struct(instance)
