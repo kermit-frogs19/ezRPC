@@ -67,13 +67,20 @@ class Producer(Client):
         timeout = request.timeout if not isinstance(request.timeout, _DEFAULT_TIMEOUT) else self.timeout
 
         stream_id = connection._quic.get_next_available_stream_id()
-        connection._http.send_headers(stream_id=stream_id, headers=request.render_headers(), end_stream=False)
-        connection._http.send_data(stream_id=stream_id, data=request.body, end_stream=True)
 
+        # Register waiter BEFORE sending request
         waiter = connection._loop.create_future()
         connection._request_events[stream_id] = deque()
         connection._request_waiter[stream_id] = waiter
+
+        # Now safe to send request
+        connection._http.send_headers(stream_id=stream_id, headers=request.render_headers(), end_stream=False)
+        connection._http.send_data(stream_id=stream_id, data=request.body, end_stream=True)
+
+        # Flush data to the network
         connection.transmit()
+
+        # Wait for response
         try:
             events = await asyncio.wait_for(asyncio.shield(waiter), timeout=timeout)
         except asyncio.TimeoutError:
