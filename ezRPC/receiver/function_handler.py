@@ -52,7 +52,7 @@ class FunctionHandler:
         return {
             "parameters": {k: v.annotation.__name__ for k, v in self.signature.parameters.items()},
             "description": self.description,
-            "return": str(self.signature.return_annotation.__name__)
+            "return": str(self.signature.return_annotation.__name__) if self.signature.return_annotation is not None else None
         }
 
     async def call(self, call: ReceiverCall) -> ReceiverResponse:
