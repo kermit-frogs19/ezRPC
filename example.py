@@ -23,7 +23,7 @@ async def get_subtraction(a: int, b: int) -> int:
 
 
 async def sender():
-    client = Producer("https://10.0.0.33:8000")
+    client = Producer("https://127.0.0.1:8000")
     result = client.call("get_sum", 1, 2)
     print(result)
 

@@ -76,7 +76,7 @@ app.add_class_instance(TestClass("John", "john@email.com"))
 
 
 async def main():
-    client = Producer("https://vadim-seliukov-quic-server.com:8080", use_tls=True, timeout=None)     # vadim-seliukov-quic-server.com
+    client = Producer("https://127.0.0.1:8000", use_tls=True, timeout=None)
     functions = await client.discover()
     print(functions)
     await client.call("dummy")
