@@ -5,27 +5,39 @@ from typing import Literal
 
 
 from ezh3.client import ClientRequest
+from ezRPC.common.config import CallType, STANDARD_CALL
+
 
 
 @dataclass
 class ProducerCallData:
-    f: str | None = field(default=None)
-    a: tuple | None = field(default=None)
+    function_name: str | None = field(default=None)
+    args: tuple | None = field(default=None)
+    call_type: CallType = field(default=STANDARD_CALL)
 
     def to_dict(self) -> dict:
         return {
-            "f": self.f,
-            "a": self.a
+            "f": self.function_name,
+            "a": self.args
         }
 
+    def to_list(self) -> list:
+        return [
+            self.function_name,
+            int(self.call_type),
+            self.args
+        ]
+
     def to_msgpack(self) -> bytes:
-        return msgpack.packb(self.to_dict(), use_bin_type=True)
+        try:
+            return msgpack.packb(self.to_list(), use_bin_type=True)
+        except BaseException as e:
+            raise ValueError(f"Unsupported types passed when making the call: {self}") from e
 
 
 @dataclass
 class ProducerCall(ClientRequest):
     data: ProducerCallData = field(default=None)
-    content_type: str = field(default="application/octet-stream", init=False)
 
     method: Literal["GET", "POST", "PATCH", "PUT", "DELETE", "CONNECT"] = field(default="POST", init=False)
     charset: str = field(default=None, init=False)
@@ -41,7 +53,6 @@ class ProducerCall(ClientRequest):
             (b":scheme", self.url.scheme.encode(self._header_encoding)),
             (b":path", self.url.full_path.encode(self._header_encoding)),
             (b":authority", self.url.authority.encode(self._header_encoding)),
-            (b"content-type", self.content_type.encode(self._header_encoding))
         ]
 
         headers.extend([(k.lower().encode(self._header_encoding), v.encode()) for (k, v) in self.headers.items() if

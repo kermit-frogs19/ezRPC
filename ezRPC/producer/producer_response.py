@@ -3,23 +3,31 @@ import msgspec
 from typing import Any
 from dataclasses import dataclass, field
 from ezh3.client.client_response import ClientResponse
+from ezRPC.common.config import StandardResponseFormat
 
 
 class ProducerResponseData:
     def __init__(
             self,
             raw: bytes = b"",
+            error: str | None = None,
+            data: Any = None
+
     ) -> None:
         self.raw = raw
-        self.e: str | None = None
-        self.d: str | None = None
+        self.error = error
+        self.data = data
 
         self.decode()
 
     def decode(self) -> None:
-        data = msgpack.unpackb(self.raw, raw=False)
-        self.e = data["e"]
-        self.d = data["d"]
+        if not self.raw:
+            return
+
+        decoded = msgspec.msgpack.decode(self.raw, type=StandardResponseFormat)
+
+        self.error = decoded.error
+        self.data = data[1]
 
 
 @dataclass
@@ -37,10 +45,6 @@ class ProducerResponse(ClientResponse):
                 self.path = headers["path"]
             if "status" in headers:
                 self.status_code = int(headers["status"])
-            if "content-type" in headers and not self.content_type:
-                self.content_type = headers["content-type"]
-            else:
-                self.content_length = len(self.body)
 
         else:
             headers = {}

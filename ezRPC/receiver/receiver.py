@@ -5,11 +5,11 @@ import msgspec
 from ezh3.server import Server, ServerRequest, Response, RouteHandler
 from ezh3.common.config import DEFAULT_PORT, DEFAULT_HOST
 
-from ezRPC.receiver.function_handler import FunctionHandler
+from ezRPC.receiver.function_handler import FunctionHandler, SystemFunctionHandler
 from ezRPC.receiver.receiver_response import ReceiverResponse, ReceiverResponseData
 from ezRPC.receiver.receiver_call import ReceiverCall
-from ezRPC.common.config import DEFAULT_PATH, DEFAULT_METHOD
 from ezRPC.receiver.receiver_connection import ReceiverConnection
+from ezRPC.common.config import DEFAULT_PATH, DEFAULT_METHOD, DISCOVER_SYSTEM_PROCEDURE_NAME, PING_SYSTEM_PROCEDURE_NAME
 
 
 class Receiver(Server):
@@ -34,7 +34,17 @@ class Receiver(Server):
             enable_ipv6=enable_ipv6
         )
         self.functions: dict[str, FunctionHandler] = {}
-        self.instances: dict[str, Any] = {}
+        self.instances: dict[str, Any] = {}     # Keep the references to instances, so they're not Garbage-Collected
+        self.system_functions: dict[str, SystemFunctionHandler] = {
+            DISCOVER_SYSTEM_PROCEDURE_NAME: SystemFunctionHandler(
+                name=DISCOVER_SYSTEM_PROCEDURE_NAME,
+                function=self.discover
+            ),
+            PING_SYSTEM_PROCEDURE_NAME: SystemFunctionHandler(
+                name=PING_SYSTEM_PROCEDURE_NAME,
+                function=self.ping
+            )
+        }
 
     def add_function(
             self,
@@ -87,42 +97,46 @@ class Receiver(Server):
 
     async def discover(self) -> ReceiverResponse:
         result = {func_name: handler.discover() for func_name, handler in self.functions.items()}
-        return ReceiverResponse(data=ReceiverResponseData(e=None, d=result, f="__discover__"))
+        return ReceiverResponse(data=ReceiverResponseData(error=None, data=result))
+
+    async def ping(self) -> ReceiverResponse:
+        return ReceiverResponse(data=ReceiverResponseData(error=None, data=None))
 
     async def handle_call(self, call: ReceiverCall) -> ReceiverResponse:
         """Processes request and returns response"""
 
         func_name = call.get_function_name()
-        if func_name == "__discover__":
-            return await self.discover()
+        if func_name in self.system_functions:  # Check if the call was made to a system function
+            handler = self.system_functions.get(func_name)
+            return await handler.call(call)
 
         handler = self.functions.get(func_name)
         if not handler:
-            return ReceiverResponse(data=ReceiverResponseData(e=f"Not found function '{func_name}'", f=func_name))
+            return ReceiverResponse(data=ReceiverResponseData(error=f"Not found function '{func_name}'"))
         try:
             handler.verify(call)
         except (ValueError, TypeError, AssertionError, msgspec.ValidationError) as e:
             return ReceiverResponse(data=ReceiverResponseData(
-                e=f"Call doesn't match the function format: {str(e)}",
-                d=None,
-                f=func_name
+                error=f"Call doesn't match the function format: {str(e)}",
+                data=None,
             ))
 
         try:
             return await handler.call(call)
         except BaseException as e:
             return ReceiverResponse(data=ReceiverResponseData(
-                e=f"Error when running function '{func_name}': {str(e)}",
-                d=None,
-                f=call.data.f
+                error=f"Error when running function '{func_name}': {str(e)}",
+                data=None,
             ))
 
     async def handle_request(self, request: ReceiverCall) -> Response:
         if request.path != DEFAULT_PATH:
-            return ReceiverResponse(400, data=ReceiverResponseData(e=f"Requests should only be made to {DEFAULT_PATH} endpoint, not '{request.path}'"))
+            return ReceiverResponse(400, data=ReceiverResponseData(
+                error=f"Requests should only be made to {DEFAULT_PATH} endpoint, not '{request.path}'"))
 
         if request.method != DEFAULT_METHOD:
-            return ReceiverResponse(400, data=ReceiverResponseData(e=f"Requests should only be of method {DEFAULT_METHOD}, not '{request.method}'"))
+            return ReceiverResponse(400, data=ReceiverResponseData(
+                error=f"Requests should only be of method {DEFAULT_METHOD}, not '{request.method}'"))
 
         return await self.handle_call(request)
 

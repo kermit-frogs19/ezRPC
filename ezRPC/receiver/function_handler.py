@@ -8,6 +8,7 @@ from typing import Any, Type
 
 from ezRPC.receiver.receiver_call import ReceiverCall, ReceiverCallData
 from ezRPC.receiver.receiver_response import ReceiverResponse, ReceiverResponseData
+from ezRPC.common.config import NOT_AWAITED_RUN_CALL, StandardCallFormat
 
 
 @dataclass
@@ -17,9 +18,9 @@ class FunctionHandler:
     await_result: bool = field(default=True)
     description: str = field(default=None)
 
-    parameters: MappingProxyType = field(default=None, repr=False)
-    signature: Signature = field(default=None, repr=False)
-    cls: type[msgspec.Struct] = field(default=None, repr=False)
+    parameters: MappingProxyType = field(default=None, repr=False, init=False)
+    signature: Signature = field(default=None, repr=False, init=False)
+    cls: type[msgspec.Struct] = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         self.signature = signature(self.function)
@@ -40,12 +41,16 @@ class FunctionHandler:
             if param.annotation is Parameter.empty:
                 raise TypeError(f"Parameter '{name}' in {self.function.__name__} has no type annotation.")
             args_annotations.append(param.annotation)
+
+        class_name = f"{self.function.__name__.capitalize()}CallArgs"
+
         fields: list[tuple[str, Any]] = [
-            ("f", str),
-            ("a", tuple[*args_annotations])
+            ("function_name", str),
+            ("call_type", int),
+            ("args", tuple[*args_annotations])
         ]
 
-        struct_cls = msgspec.defstruct(f"{self.function.__name__.capitalize()}Args", fields=fields)
+        struct_cls = msgspec.defstruct(name=class_name, fields=fields, array_like=True, bases=(StandardCallFormat,))
         self.cls = struct_cls
 
     def discover(self) -> dict:
@@ -59,20 +64,32 @@ class FunctionHandler:
         if self.function is None:
             raise ValueError(f"Function handler is not defined for FunctionHandler object {self}")
 
-        args = call.data.a if call.data.a is not None else []
-        if not self.await_result:
+        args = call.data.args if call.data.args is not None else []
+        if not self.await_result or call.data.call_type == NOT_AWAITED_RUN_CALL:
             if asyncio.iscoroutinefunction(self.function):
                 # noinspection PyAsyncCall
                 asyncio.create_task(self.function(*args))
 
-            return ReceiverResponse(data=ReceiverResponseData(e=None, d=None, f=call.data.f))
+            return ReceiverResponse(data=ReceiverResponseData(error=None, data=None))
 
         if asyncio.iscoroutinefunction(self.function):
             result = await self.function(*args)
         else:
             result = self.function(*args)
 
-        return ReceiverResponse(data=ReceiverResponseData(e=None, d=result, f=call.data.f))
+        return ReceiverResponse(data=ReceiverResponseData(error=None, data=result))
+
+
+@dataclass
+class SystemFunctionHandler(FunctionHandler):
+    await_result: bool = field(default=True, init=False)
+    description: str = field(default=None, init=False)
+
+    async def call(self, call: ReceiverCall) -> ReceiverResponse:
+        if self.function is None:
+            raise ValueError(f"System function handler is not defined for FunctionHandler object {self}")
+        return await self.function()
+
 
 
 

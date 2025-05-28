@@ -2,7 +2,7 @@ from ezh3.server import ServerRequest
 import msgpack
 import msgspec
 
-from ezRPC.common.config import DEFAULT_PATH
+from ezRPC.common.config import DEFAULT_PATH, StandardCallFormat
 
 
 class ReceiverCall(ServerRequest):
@@ -34,9 +34,19 @@ class ReceiverCall(ServerRequest):
 
         return self.data.to_dict()
 
+    def list(self) -> list:
+        if self.data is None:
+            self._process_body()
+
+        return self.data.to_list()
+
     def get_function_name(self) -> str:
         unpacked = msgpack.unpackb(self.data.raw, raw=False)
         return unpacked.get("f")
+
+    def get_function_name_new(self) -> str:
+        unpacked = msgpack.unpackb(self.data.raw, raw=False)
+        return unpacked[0]
 
     def _process_headers(self) -> None:
         if self.raw_headers:
@@ -62,25 +72,41 @@ class ReceiverCallData:
             raw: bytes = b""
     ) -> None:
         self.raw = raw
-        self.f: str | None = None
-        self.a: list | None = None
-
-    def to_msgpack(self) -> bytes:
-        return msgpack.packb(self.to_dict(), use_bin_type=True)
+        self.function_name: str | None = None
+        self.call_type: int | None = None
+        self.args: list | None = None
 
     def to_dict(self) -> dict:
         return {
-            "f": self.f,
-            "a": self.a
+            "f": self.function_name,
+            "t": self.call_type,
+            "a": self.args,
         }
 
-    def from_msgspec_struct(self, instance: msgspec.Struct) -> None:
-        self.a = instance.a
-        self.f = instance.f
+    def to_list(self) -> list:
+        return [
+            self.function_name,
+            self.call_type,
+            self.args
+        ]
+
+    def to_msgpack(self) -> bytes:
+        return msgpack.packb(self.to_list(), use_bin_type=True)
+
+    def from_msgspec_struct(self, instance: StandardCallFormat) -> None:
+        self.function_name = instance.function_name
+        self.call_type = instance.call_type
+        self.args = instance.args
 
     def from_dict(self, data: dict) -> None:
-        self.a = data["a"]
-        self.f = data["f"]
+        self.function_name = data["f"]
+        self.call_type = data["t"]
+        self.args = data["a"]
+
+    def from_list(self, data: list) -> None:
+        self.function_name = data.f
+        self.call_type = data.t
+        self.args = data.a
 
 
 
