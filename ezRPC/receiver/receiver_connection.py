@@ -4,7 +4,7 @@ from aioquic.quic.events import ProtocolNegotiated, StreamReset, QuicEvent
 from ezh3.server import ServerConnection
 
 from ezRPC.receiver.receiver_call import ReceiverCall
-from ezRPC.common.config import FIRE_AND_FORGET_CALL
+from ezRPC.common.config import CallType
 
 
 class ReceiverConnection(ServerConnection):
@@ -41,7 +41,7 @@ class ReceiverConnection(ServerConnection):
 
         response = await self.server.handle_request(request)
 
-        if request.data.call_type == FIRE_AND_FORGET_CALL:
+        if request.data.call_type == CallType.FIRE_AND_FORGET_CALL:
             self.close_stream(stream_id=stream_id)
         else:
             self.send_response(stream_id=stream_id, response=response)

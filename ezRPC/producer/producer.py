@@ -11,8 +11,7 @@ from ezRPC.producer.producer_call import ProducerCall, ProducerCallData
 from ezRPC.producer.producer_response import ProducerResponse, ProducerResponseData
 from ezRPC.producer.producer_connection import ProducerConnection
 from ezRPC.producer.stub_proxy import StubProxy
-from ezRPC.common.config import (DEFAULT_PATH, DISCOVER_SYSTEM_PROCEDURE_NAME, PING_SYSTEM_PROCEDURE_NAME, CallType,
-                                 STANDARD_CALL, NOT_AWAITED_RUN_CALL)
+from ezRPC.common.config import (DEFAULT_PATH, DISCOVER_SYSTEM_PROCEDURE_NAME, PING_SYSTEM_PROCEDURE_NAME, CallType)
 
 
 class Producer(Client):
@@ -39,7 +38,7 @@ class Producer(Client):
             url: str = None,
             headers: dict = None,
             safe: bool = False,
-            call_type: CallType = STANDARD_CALL
+            call_type: int = CallType.STANDARD_CALL
     ) -> Any:
         response = await self._request(ProducerCall(
             url=url,
@@ -95,7 +94,7 @@ class Producer(Client):
         # Flush data to the network
         connection.transmit()
 
-        if request.data.call_type == NOT_AWAITED_RUN_CALL:
+        if request.data.call_type == CallType.FIRE_AND_FORGET_CALL:
             connection.cleanup_stream(stream_id=stream_id)
             return ProducerResponse(status_code=200, request=request, data=ProducerResponseData(error=None, data=None))
 

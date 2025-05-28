@@ -107,9 +107,9 @@ class ReceiverCallData:
         self.args = data["a"]
 
     def from_list(self, data: list) -> None:
-        self.function_name = data.f
-        self.call_type = data.t
-        self.args = data.a
+        self.function_name = data[0]
+        self.call_type = data[1]
+        self.args = data[2]
 
 
 

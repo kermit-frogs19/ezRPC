@@ -5,7 +5,7 @@ from typing import Literal
 
 
 from ezh3.client import ClientRequest
-from ezRPC.common.config import CallType, STANDARD_CALL
+from ezRPC.common.config import CallType
 
 
 
@@ -13,7 +13,7 @@ from ezRPC.common.config import CallType, STANDARD_CALL
 class ProducerCallData:
     function_name: str | None = field(default=None)
     args: tuple | None = field(default=None)
-    call_type: CallType = field(default=STANDARD_CALL)
+    call_type: int = field(default=CallType.STANDARD_CALL)
 
     def to_dict(self) -> dict:
         return {

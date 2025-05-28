@@ -8,7 +8,7 @@ from typing import Any, Type
 
 from ezRPC.receiver.receiver_call import ReceiverCall, ReceiverCallData
 from ezRPC.receiver.receiver_response import ReceiverResponse, ReceiverResponseData
-from ezRPC.common.config import NOT_AWAITED_RUN_CALL, StandardCallFormat
+from ezRPC.common.config import StandardCallFormat, CallType
 
 
 @dataclass
@@ -61,7 +61,7 @@ class FunctionHandler:
             raise ValueError(f"Function handler is not defined for FunctionHandler object {self}")
 
         args = call.data.args if call.data.args is not None else []
-        if not self.await_result or call.data.call_type == NOT_AWAITED_RUN_CALL:
+        if not self.await_result or call.data.call_type == CallType.NOT_AWAITED_RUN_CALL:
             if asyncio.iscoroutinefunction(self.function):
                 # noinspection PyAsyncCall
                 asyncio.create_task(self.function(*args))
