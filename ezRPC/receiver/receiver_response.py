@@ -27,7 +27,7 @@ class ReceiverResponseData:
 
 @dataclass
 class ReceiverResponse(Response):
-    data: ReceiverResponseData = field(default=ReceiverResponseData(error=None, data=None))
+    data: ReceiverResponseData = field(default=None)
 
     def render_headers(self) -> list:
         raw_headers = [
