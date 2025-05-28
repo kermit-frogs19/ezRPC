@@ -20,7 +20,7 @@ class FunctionHandler:
 
     parameters: MappingProxyType = field(default=None, repr=False, init=False)
     signature: Signature = field(default=None, repr=False, init=False)
-    cls: type[msgspec.Struct] = field(default=None, repr=False, init=False)
+    cls: type[StandardCallFormat] = field(default=None, repr=False, init=False)
 
     def __post_init__(self):
         self.signature = signature(self.function)
@@ -28,10 +28,6 @@ class FunctionHandler:
         self.build_msgspec_class()
 
     def verify(self, call: ReceiverCall):
-        func_name = call.get_function_name()
-        if func_name != self.name:
-            raise ValueError(f"Function mismatch: expected '{self.name}', got '{func_name}'")
-
         instance = msgspec.msgpack.decode(call.data.raw, type=self.cls)
         call.data.from_msgspec_struct(instance)
 

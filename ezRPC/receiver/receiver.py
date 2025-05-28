@@ -105,7 +105,7 @@ class Receiver(Server):
     async def handle_call(self, call: ReceiverCall) -> ReceiverResponse:
         """Processes request and returns response"""
 
-        func_name = call.get_function_name()
+        func_name = call.get_function_name_new()
         if func_name in self.system_functions:  # Check if the call was made to a system function
             handler = self.system_functions.get(func_name)
             return await handler.call(call)
