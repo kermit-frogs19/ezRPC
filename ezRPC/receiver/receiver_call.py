@@ -49,6 +49,9 @@ class ReceiverCall(ServerRequest):
         return unpacked[0]
 
     def _process_headers(self) -> None:
+        if self.headers:
+            return
+
         if self.raw_headers:
             headers = {str(k.decode()).replace(":", ""): v.decode() for k, v in self.raw_headers}
 

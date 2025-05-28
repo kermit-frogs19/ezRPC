@@ -27,7 +27,7 @@ class ProducerResponseData:
         decoded = msgspec.msgpack.decode(self.raw, type=StandardResponseFormat)
 
         self.error = decoded.error
-        self.data = data[1]
+        self.data = decoded.data
 
 
 @dataclass

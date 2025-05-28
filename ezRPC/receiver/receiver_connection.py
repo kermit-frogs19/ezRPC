@@ -12,6 +12,7 @@ class ReceiverConnection(ServerConnection):
         super().__init__(server, *args, **kwargs)
 
         self._requests: dict[int, ReceiverCall] = {}  # ✅ Stores request data (headers + body)
+        self.headers: dict | None = None
 
     async def _h3_event_received(self, event: H3Event) -> None:
         if isinstance(event, HeadersReceived):
