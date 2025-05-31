@@ -29,3 +29,8 @@ class StandardCallFormat(msgspec.Struct, array_like=True):
 class StandardResponseFormat(msgspec.Struct, array_like=True):
     error: str | None
     data: Any
+
+
+SUPPORTED_TYPES: list = [int, float, str, list, tuple, dict, None]
+
+

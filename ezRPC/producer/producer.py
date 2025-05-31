@@ -10,6 +10,7 @@ from ezh3.common.config import DEFAULT_TIMEOUT, _DEFAULT_TIMEOUT
 from ezRPC.producer.producer_call import ProducerCall, ProducerCallData
 from ezRPC.producer.producer_response import ProducerResponse, ProducerResponseData
 from ezRPC.producer.producer_connection import ProducerConnection
+from ezRPC.producer.exceptions import ArgumentError, ProcedureNameError, ProcedureRunException
 from ezRPC.producer.stub_proxy import StubProxy
 from ezRPC.common.config import (DEFAULT_PATH, DISCOVER_SYSTEM_PROCEDURE_NAME, PING_SYSTEM_PROCEDURE_NAME, CallType)
 
@@ -49,7 +50,13 @@ class Producer(Client):
             return response
 
         if response.data.error is not None:
-            raise Exception(response.data.error)
+            if response.data.error.startswith("a-"):
+                raise ArgumentError(response.data.error[2:])
+            elif response.data.error.startswith("n-"):
+                raise ProcedureNameError(response.data.error[2:])
+            elif response.data.error.startswith("r-"):
+                raise ProcedureRunException(response.data.error[2:])
+            raise HTTPError(response.data.error)
         return response.data.data
 
     async def call_safe(self, name: str,  *args, url: str = None, headers: dict = None) -> ProducerResponse:

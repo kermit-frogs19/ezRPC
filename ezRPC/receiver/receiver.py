@@ -51,14 +51,16 @@ class Receiver(Server):
             func:  Callable,
             name: str = None,
             await_result: bool = True,
-            description: str = None
+            description: str = None,
+            discovery: bool = True
     ) -> None:
         function_name = func.__name__ if name is None else name
         self.functions[function_name] = FunctionHandler(
             name=function_name,
             function=func,
             await_result=await_result,
-            description=description
+            description=description,
+            discovery=discovery
         )
 
     def add_class_instance(
@@ -66,7 +68,8 @@ class Receiver(Server):
             instance: Any,
             name: str | None = None,
             await_result: bool = True,
-            description: str | None = None
+            description: str | None = None,
+            discovery: bool = True
     ):
         name = instance.__class__.__name__ if name is None else name
 
@@ -85,18 +88,25 @@ class Receiver(Server):
                 func=method,
                 name=f"{name}.{method.__name__}",
                 await_result=await_result,
-                description=description
+                description=description,
+                discovery=discovery
             )
 
-    def function(self, name: str = None, await_result: bool = True, description: str = None) -> Callable:
+    def function(
+            self,
+            name: str = None,
+            await_result: bool = True,
+            description: str = None,
+            discovery: bool = True
+    ) -> Callable:
         def decorator(func: Callable):
-            self.add_function(func, name, await_result, description)
+            self.add_function(func, name, await_result, description, discovery)
             return func
 
         return decorator
 
     async def discover(self) -> ReceiverResponse:
-        result = {func_name: handler.discover() for func_name, handler in self.functions.items()}
+        result = {func_name: handler.discover() for func_name, handler in self.functions.items() if handler.discovery is True}
         return ReceiverResponse(data=ReceiverResponseData(error=None, data=result))
 
     async def ping(self) -> ReceiverResponse:
@@ -108,16 +118,22 @@ class Receiver(Server):
         func_name = call.get_function_name_new()
         if func_name in self.system_functions:  # Check if the call was made to a system function
             handler = self.system_functions.get(func_name)
-            return await handler.call(call)
+            try:
+                return await handler.call(call)
+            except BaseException as e:
+                return ReceiverResponse(data=ReceiverResponseData(
+                    error=f"r-Error when running system function '{func_name}': {str(e)}",
+                    data=None,
+                ))
 
         handler = self.functions.get(func_name)
         if not handler:
-            return ReceiverResponse(data=ReceiverResponseData(error=f"Not found function '{func_name}'"))
+            return ReceiverResponse(data=ReceiverResponseData(error=f"n-Not found function '{func_name}'"))
         try:
             handler.verify(call)
         except (ValueError, TypeError, AssertionError, msgspec.ValidationError) as e:
             return ReceiverResponse(data=ReceiverResponseData(
-                error=f"Call doesn't match the function format: {str(e)}",
+                error=f"a-Call doesn't match the function format: {str(e)}",
                 data=None,
             ))
 
@@ -125,7 +141,7 @@ class Receiver(Server):
             return await handler.call(call)
         except BaseException as e:
             return ReceiverResponse(data=ReceiverResponseData(
-                error=f"Error when running function '{func_name}': {str(e)}",
+                error=f"r-Error when running function '{func_name}': {str(e)}",
                 data=None,
             ))
 
