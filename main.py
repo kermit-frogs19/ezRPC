@@ -2,7 +2,7 @@ from ezRPC.receiver.receiver import Receiver
 import asyncio
 
 
-app = Receiver()
+app = Receiver(enable_tls=False)
 
 
 @app.function(description="Get the sum of 2 integers")
