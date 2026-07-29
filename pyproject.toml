@@ -4,10 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ezRPC"
-version = "1.0.0"
+version = "2.0.0"
+description = "Convenient RPC over raw QUIC with MessagePack."
+requires-python = ">=3.11"
 dependencies = [
-    "aioquic",
-    "msgpack",
-    "msgspec",
-    "ezh3 @ git+https://github.com/kermit-frogs19/ezh3.git@main"
+    "aioquic>=1.2.0",
+    "msgspec>=0.19.0",
+    "cryptography>=42.0.0",
+    "certifi",
+    "xxhash>=3.0",
 ]
+
+[project.optional-dependencies]
+jwt = ["pyjwt>=2.0"]
+test = ["pytest>=8.0", "pytest-asyncio>=0.23", "pyjwt>=2.0"]
+
+[tool.setuptools.packages.find]
+include = ["ezRPC*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

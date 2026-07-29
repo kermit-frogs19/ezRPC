@@ -1,105 +1,105 @@
-from dataclasses import dataclass, field
-import asyncio
-from typing import Callable, cast
-from inspect import signature, Signature, Parameter
-from types import MappingProxyType
-import msgspec
-from typing import Any, Type
+"""Wraps a registered function: validates its signature once, then decodes and
+invokes it per call.
 
-from ezRPC.receiver.receiver_call import ReceiverCall, ReceiverCallData
-from ezRPC.receiver.receiver_response import ReceiverResponse, ReceiverResponseData
-from ezRPC.common.config import StandardCallFormat, CallType, SUPPORTED_TYPES
+A parameter is a **wire argument** (its value comes from the client, typed and
+validated by msgspec) unless its default is a ``Security(...)`` marker, in which
+case it's a **dependency** — the framework runs the scheme against the call's auth
+and injects the result, rejecting the call if the scheme rejects. So the msgspec
+args type is built from the wire params only; dependencies are resolved at call
+time and interleaved back into their declared positions.
+"""
+
+import asyncio
+from dataclasses import dataclass, field
+from inspect import signature, Signature, Parameter, isawaitable
+from typing import Callable, Any
+
+import msgspec
+
+from ezRPC.common.config import SUPPORTED_TYPES
+from ezRPC.security import Security
 
 
 @dataclass
 class FunctionHandler:
-    name: str = field(default=None)
-    function: Callable = field(default=lambda: None)
-    await_result: bool = field(default=True)
-    description: str = field(default=None)
-    discovery: bool = field(default=True)
+    name: str
+    function: Callable
+    await_result: bool = True
+    description: str | None = None
+    discovery: bool = True
 
-    check_return_type: bool = field(default=True, repr=False, init=False)
-    parameters: MappingProxyType = field(default=None, repr=False, init=False)
-    signature: Signature = field(default=None, repr=False, init=False)
-    cls: type[StandardCallFormat] = field(default=None, repr=False, init=False)
+    is_coroutine: bool = field(default=False, init=False, repr=False)
+    signature: Signature = field(default=None, init=False, repr=False)
+    args_type: Any = field(default=None, init=False, repr=False)
+    method_id: int = field(default=-1, init=False, repr=False)
+    # one entry per parameter, in order: None = wire arg, else = a Security scheme
+    _param_plan: list = field(default=None, init=False, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.signature = signature(self.function)
-        self.parameters = self.signature.parameters
-        self.build_msgspec_class()
+        self.is_coroutine = asyncio.iscoroutinefunction(self.function)
+        self._build_args_type()
 
-    def verify(self, call: ReceiverCall):
-        instance = msgspec.msgpack.decode(call.data.raw, type=self.cls)
-        call.data.from_msgspec_struct(instance)
-
-    def build_msgspec_class(self) -> None:
-        if self.check_return_type and self.signature.return_annotation not in SUPPORTED_TYPES:
-            raise TypeError(f"Unsupported return value type - '{self.signature.return_annotation}' in function {self.function.__name__}")
-
-        args_annotations: list = []
-        for name, param in self.parameters.items():
+    def _build_args_type(self) -> None:
+        ret = self.signature.return_annotation
+        if ret is not Signature.empty and ret not in SUPPORTED_TYPES:
+            raise TypeError(
+                f"unsupported return type '{ret}' in function '{self.function.__name__}'"
+            )
+        self._param_plan = []
+        wire_annotations: list = []
+        for pname, param in self.signature.parameters.items():
+            if isinstance(param.default, Security):     # injected dependency, not a wire arg
+                self._param_plan.append(param.default.scheme)
+                continue
             if param.annotation is Parameter.empty:
-                raise TypeError(f"Parameter '{name}' in {self.function.__name__} has no type annotation.")
-            elif param.annotation not in SUPPORTED_TYPES:
-                raise TypeError(f"Unsupported type - '{param.annotation}' of parameter '{name}' -  in function {self.function.__name__}")
+                raise TypeError(
+                    f"parameter '{pname}' in '{self.function.__name__}' has no type annotation"
+                )
+            if param.annotation not in SUPPORTED_TYPES:
+                raise TypeError(
+                    f"unsupported type '{param.annotation}' for parameter '{pname}' "
+                    f"in '{self.function.__name__}'"
+                )
+            wire_annotations.append(param.annotation)
+            self._param_plan.append(None)
+        self.args_type = tuple[*wire_annotations] if wire_annotations else tuple[()]
 
-            args_annotations.append(param.annotation)
+    def decode_args(self, raw) -> tuple:
+        """Decode + type-validate the wire arguments against this function's signature."""
+        return msgspec.msgpack.decode(raw, type=self.args_type)
 
-        class_name = f"{self.function.__name__.capitalize()}CallArgs"
+    async def build_args(self, ctx, wire_args: tuple) -> list:
+        """Interleave decoded wire args with resolved Security dependencies, in
+        declaration order. A rejecting scheme raises AuthError, which the caller maps
+        to an auth failure."""
+        full, wi = [], 0
+        for scheme in self._param_plan:
+            if scheme is None:
+                full.append(wire_args[wi])
+                wi += 1
+            else:
+                principal = scheme(ctx)
+                if isawaitable(principal):
+                    principal = await principal
+                full.append(principal)
+        return full
 
-        fields: list[tuple[str, Any]] = [
-            ("function_name", str),
-            ("call_type", int),
-            ("args", tuple[*args_annotations])
-        ]
+    async def call_with(self, full_args: list) -> Any:
+        if self.is_coroutine:
+            return await self.function(*full_args)
+        return self.function(*full_args)
 
-        struct_cls = msgspec.defstruct(name=class_name, fields=fields, array_like=True, bases=(StandardCallFormat,))
-        self.cls = cast(type[StandardCallFormat], struct_cls)
-
-    def discover(self) -> dict:
-        return {
-            "parameters": {k: v.annotation.__name__ for k, v in self.signature.parameters.items()},
-            "description": self.description,
-            "return": str(self.signature.return_annotation.__name__) if self.signature.return_annotation is not None else None
-        }
-
-    async def call(self, call: ReceiverCall) -> ReceiverResponse:
-        if self.function is None:
-            raise ValueError(f"Function handler is not defined for FunctionHandler object {self}")
-
-        args = call.data.args if call.data.args is not None else []
-        if not self.await_result or call.data.call_type == CallType.NOT_AWAITED_RUN_CALL:
-            if asyncio.iscoroutinefunction(self.function):
-                # noinspection PyAsyncCall
-                asyncio.create_task(self.function(*args))
-
-            return ReceiverResponse(data=ReceiverResponseData(error=None, data=None))
-
-        if asyncio.iscoroutinefunction(self.function):
-            result = await self.function(*args)
+    def describe(self) -> dict:
+        params = {}
+        for pname, param in self.signature.parameters.items():
+            if isinstance(param.default, Security):     # not part of the wire contract
+                continue
+            ann = param.annotation
+            params[pname] = getattr(ann, "__name__", str(ann))
+        ret = self.signature.return_annotation
+        if ret is Signature.empty or ret is None:
+            ret_name = None
         else:
-            result = self.function(*args)
-
-        return ReceiverResponse(data=ReceiverResponseData(error=None, data=result))
-
-
-@dataclass
-class SystemFunctionHandler(FunctionHandler):
-    await_result: bool = field(default=True, init=False)
-    description: str = field(default=None, init=False)
-    check_return_type: bool = field(default=False, repr=False, init=False)
-
-    async def call(self, call: ReceiverCall) -> ReceiverResponse:
-        if self.function is None:
-            raise ValueError(f"System function handler is not defined for FunctionHandler object {self}")
-        return await self.function()
-
-
-
-
-
-
-
-
-
+            ret_name = getattr(ret, "__name__", str(ret))
+        return {"parameters": params, "description": self.description, "return": ret_name}

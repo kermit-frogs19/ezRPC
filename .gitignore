@@ -25,3 +25,17 @@ Thumbs.db
 dist/
 build/
 
+# Auto-generated self-signed dev certificates (never commit private keys)
+cert.pem
+key.pem
+
+# Test / tooling caches
+.pytest_cache/
+ezRPC-technical-review.md
+.env
+.coverage
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+docs/
+docs

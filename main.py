@@ -1,19 +1,16 @@
-from ezRPC.receiver.receiver import Receiver
+from ezRPC import Receiver
 import asyncio
 
 
-app = Receiver(enable_tls=False)
+app = Receiver()
 
 
-@app.function(description="Get the sum of 2 integers")
+@app.function(description="Get the sum of two integers")
 async def get_sum(a: int, b: int) -> int:
-    print(f"Got new call for function get_sum: a = {a}, b = {b}")
-    result = a + b
-    print(f"Call result is - {result}")
-    return result
+    return a + b
 
 
 if __name__ == "__main__":
-    asyncio.run(app.run(host="0.0.0.0", port=8000))
-
-
+    # Local dev server. A self-signed cert is generated automatically; connect a
+    # client with Producer("127.0.0.1:8000", verify=False).
+    asyncio.run(app.run(host="127.0.0.1", port=8000))

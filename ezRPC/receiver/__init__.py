@@ -1,4 +1,3 @@
 from ezRPC.receiver.receiver import Receiver
-from ezRPC.receiver.receiver_call import ReceiverCall, ReceiverCallData
-from ezRPC.receiver.receiver_connection import ReceiverConnection
-from ezRPC.receiver.receiver_response import ReceiverResponse, ReceiverResponseData
+from ezRPC.receiver.function_handler import FunctionHandler
+from ezRPC.receiver.protocol import RPCServerProtocol
