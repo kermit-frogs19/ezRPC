@@ -25,6 +25,23 @@ from ezRPC import (
 from ezRPC.common.config import ResponseFormat
 
 
+async def eventually(predicate, timeout: float = 5.0, interval: float = 0.02) -> None:
+    """Poll until ``predicate()`` is truthy. Replaces fixed sleeps so the suite
+    is deterministic on slow CI runners instead of timing-lottery dependent."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(interval)
+    assert predicate(), "condition not met within timeout"
+
+
+def server_busy(app: Receiver):
+    """True when the server is executing at least one call (stream task or
+    background/keyed execution) — the deterministic 'mid-flight' marker."""
+    return any(p._tasks for p in app._protocols) or bool(app._background)
+
+
 def build_app(**kwargs) -> Receiver:
     app = Receiver(host="127.0.0.1", **kwargs)
     app.side_effects = []
@@ -207,16 +224,14 @@ async def test_not_awaited_returns_none_and_runs(run_server):
     app = build_app()
     client = await run_server(app)
     assert await client.call("remember", 7, call_type=NOT_AWAITED_RUN_CALL) is None
-    await asyncio.sleep(0.1)
-    assert 7 in app.side_effects
+    await eventually(lambda: 7 in app.side_effects)
 
 
 async def test_fire_and_forget(run_server):
     app = build_app()
     client = await run_server(app)
     assert await client.call("remember", 99, call_type=FIRE_AND_FORGET_CALL) is None
-    await asyncio.sleep(0.1)
-    assert 99 in app.side_effects
+    await eventually(lambda: 99 in app.side_effects)
 
 
 # ---------------------------------------------------------------- concurrency & reuse
@@ -503,16 +518,12 @@ async def test_client_cancel_cleans_up_and_stops_handler(run_server):
     await client.ping()
     proto = await client._connect(None, None)
     task = asyncio.create_task(client.call("slow_op", timeout=30))
-    await asyncio.sleep(0.2)
+    await eventually(lambda: server_busy(app))      # the handler is genuinely mid-flight
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
     assert proto._waiters == {}                     # no leaked waiter
-    for _ in range(20):                             # give STOP_SENDING time to arrive
-        if state["cancelled"]:
-            break
-        await asyncio.sleep(0.05)
-    assert state["cancelled"] is True
+    await eventually(lambda: state["cancelled"])    # STOP_SENDING reached the server
     assert state["finished"] is False
 
 
@@ -527,7 +538,7 @@ async def test_graceful_shutdown_drains_in_flight(run_server):
     client = await run_server(app)
     await client.ping()
     task = asyncio.create_task(client.call("slowish", timeout=10))
-    await asyncio.sleep(0.1)
+    await eventually(lambda: server_busy(app))   # request has reached the server
     await app.shutdown(grace=5.0)      # must wait for the in-flight call to flush
     assert await task == 42
 
@@ -545,7 +556,7 @@ async def test_shutdown_grace_configured_on_receiver(run_server):
     client = await run_server(app)
     await client.ping()
     task = asyncio.create_task(client.call("slowish", timeout=10))
-    await asyncio.sleep(0.1)
+    await eventually(lambda: server_busy(app))   # request has reached the server
     await app.shutdown()               # no arg -> uses the configured grace of 0
     with pytest.raises(EzRPCError):
         await task
@@ -624,7 +635,7 @@ def build_idem_app(**kwargs) -> Receiver:
 
     @app.function()
     async def bump_slow() -> int:               # counter moves only on *completion*
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.0)
         app.counter += 1
         return app.counter
 
@@ -688,7 +699,7 @@ async def test_disconnect_mid_call_then_retry_executes_once(run_server):
     proto = await client._connect(None, None)
 
     task = asyncio.create_task(client.call("bump_slow", idempotency_key=b"D", timeout=10))
-    await asyncio.sleep(0.15)
+    await eventually(lambda: server_busy(app))  # execution has started server-side
     proto.close()                               # abrupt connection loss mid-call
     with pytest.raises(TransportError):
         await task
@@ -705,12 +716,11 @@ async def test_keyed_call_survives_client_cancel(run_server):
     client = await run_server(app)
     await client.ping()
     task = asyncio.create_task(client.call("bump_slow", idempotency_key=b"S", timeout=30))
-    await asyncio.sleep(0.15)
+    await eventually(lambda: server_busy(app))  # execution has started server-side
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    await asyncio.sleep(0.6)
-    assert app.counter == 1                     # ran to completion despite the cancel
+    await eventually(lambda: app.counter == 1)  # ran to completion despite the cancel
     assert await client.call("bump_slow", idempotency_key=b"S") == 1   # replay
     assert app.counter == 1
 
@@ -719,7 +729,7 @@ async def test_timeout_then_same_key_collects_result(run_server):
     app = build_idem_app()
     client = await run_server(app)
     with pytest.raises(CallTimeoutError):
-        await client.call("bump_slow", idempotency_key=b"T", timeout=0.2)
+        await client.call("bump_slow", idempotency_key=b"T", timeout=0.3)
     # the execution kept running server-side; the retry gets its result
     assert await client.call("bump_slow", idempotency_key=b"T", timeout=5) == 1
     assert app.counter == 1
@@ -770,14 +780,10 @@ async def test_reconnect_resumes_tls_session(run_server):
     await client.call("bump", 1)
     proto1 = await client._connect(None, None)
     assert proto1._quic.tls.session_resumed is False     # first connection: full handshake
-    for _ in range(20):                                  # ticket arrives just after handshake
-        if client._session_tickets:
-            break
-        await asyncio.sleep(0.05)
-    assert client._session_tickets                       # client stored the server's ticket
+    await eventually(lambda: client._session_tickets)    # ticket arrives just after handshake
 
     proto1.close()                                       # connection dies
-    await asyncio.sleep(0.1)
+    await eventually(lambda: not proto1.alive)
     assert await client.call("bump", 2) == 2             # transparent reconnect
     proto2 = await client._connect(None, None)
     assert proto2 is not proto1
@@ -789,14 +795,11 @@ async def test_resumption_composes_with_safe_replay(run_server):
     app = build_idem_app()
     client = await run_server(app)
     await client.ping()
-    for _ in range(20):
-        if client._session_tickets:
-            break
-        await asyncio.sleep(0.05)
+    await eventually(lambda: client._session_tickets)
 
     proto = await client._connect(None, None)
     task = asyncio.create_task(client.call("bump_slow", idempotency_key=b"R", timeout=10))
-    await asyncio.sleep(0.15)
+    await eventually(lambda: server_busy(app))           # execution started server-side
     proto.close()                                        # dies mid-execution
     with pytest.raises(TransportError):
         await task
@@ -829,16 +832,18 @@ def test_session_ticket_store_is_bounded():
 # ---------------------------------------------------------------- transport knobs & caps
 
 async def test_keepalive_keeps_idle_connection_alive(run_server):
-    app = Receiver(host="127.0.0.1", idle_timeout=1.0)
+    # wide margins on purpose: a CI-runner stall between pings must stay well
+    # under the idle timeout, or this test measures scheduler noise
+    app = Receiver(host="127.0.0.1", idle_timeout=2.0)
 
     @app.function()
     async def n() -> int:
         return 1
 
-    client = await run_server(app, idle_timeout=1.0, keepalive=0.3)
+    client = await run_server(app, idle_timeout=2.0, keepalive=0.4)
     await client.call("n")
     proto = await client._connect(None, None)
-    await asyncio.sleep(2.0)                    # well past the 1s idle timeout
+    await asyncio.sleep(3.0)                    # well past the 2s idle timeout
     assert proto.alive                          # keepalive pings kept it open
     assert await client.call("n") == 1
     assert (await client._connect(None, None)) is proto   # same connection, no re-handshake
@@ -866,7 +871,7 @@ async def test_background_call_capacity(run_server):
 
     @app.function()
     async def slow_bg() -> None:
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(2.0)    # must outlive the three sequential calls even on a stalled runner
 
     client = await run_server(app)
     assert await client.call("slow_bg", call_type=NOT_AWAITED_RUN_CALL) is None
