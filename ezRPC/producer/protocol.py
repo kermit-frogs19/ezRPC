@@ -14,8 +14,8 @@ from aioquic.quic.events import (
     QuicEvent, StreamDataReceived, StreamReset, ConnectionTerminated,
 )
 
-from ezRPC.common.config import ERR_CLIENT_CANCEL
-from ezRPC.common.exceptions import TransportError, CallTimeoutError
+from ezRPC.common.config import ERR_CLIENT_CANCEL, ERR_REQUEST_TOO_LARGE
+from ezRPC.common.exceptions import TransportError, CallTimeoutError, CallError
 
 
 class RPCClientProtocol(QuicConnectionProtocol):
@@ -44,9 +44,14 @@ class RPCClientProtocol(QuicConnectionProtocol):
             self._buffers.pop(event.stream_id, None)
             waiter = self._waiters.pop(event.stream_id, None)
             if waiter is not None and not waiter.done():
-                waiter.set_exception(
-                    TransportError(f"stream reset by peer (code {event.error_code})")
-                )
+                # translate known application error codes into typed exceptions
+                if event.error_code == ERR_REQUEST_TOO_LARGE:
+                    exc: Exception = CallError(
+                        "request rejected by the server: body exceeds its max request size"
+                    )
+                else:
+                    exc = TransportError(f"stream reset by peer (code {event.error_code})")
+                waiter.set_exception(exc)
 
         elif isinstance(event, ConnectionTerminated):
             self.alive = False
@@ -70,27 +75,36 @@ class RPCClientProtocol(QuicConnectionProtocol):
     async def request(self, payload: bytes, *, await_result: bool,
                       timeout: float | None) -> bytes | None:
         stream_id = self._quic.get_next_available_stream_id()
-        waiter = None
-        if await_result:
-            waiter = self._loop.create_future()
-            self._waiters[stream_id] = waiter
+        if not await_result:
+            # allocate + send with no await in between: the stream id cannot be reused
+            self._quic.send_stream_data(stream_id, payload, end_stream=True)
+            self.transmit()
+            return None
 
+        waiter: asyncio.Future = self._loop.create_future()
+        self._waiters[stream_id] = waiter
         # allocate + send with no await in between: the stream id cannot be reused
         self._quic.send_stream_data(stream_id, payload, end_stream=True)
         self.transmit()
 
-        if not await_result:
-            return None
-
         try:
             return await asyncio.wait_for(asyncio.shield(waiter), timeout)
         except asyncio.TimeoutError:
-            self._waiters.pop(stream_id, None)
-            self._buffers.pop(stream_id, None)
-            # tell the server to stop producing a response it will never read
-            try:
-                self._quic.stop_stream(stream_id, ERR_CLIENT_CANCEL)
-                self.transmit()
-            except Exception:
-                pass
+            self._abandon(stream_id)
             raise CallTimeoutError(f"call timed out after {timeout}s") from None
+        except asyncio.CancelledError:
+            # the caller cancelled the call: same cleanup as a timeout, or the
+            # waiter leaks and the server keeps working for nobody
+            self._abandon(stream_id)
+            raise
+
+    def _abandon(self, stream_id: int) -> None:
+        """Drop local state for a call nobody awaits anymore, and tell the server
+        to stop producing a response it will never read."""
+        self._waiters.pop(stream_id, None)
+        self._buffers.pop(stream_id, None)
+        try:
+            self._quic.stop_stream(stream_id, ERR_CLIENT_CANCEL)
+            self.transmit()
+        except Exception:
+            pass

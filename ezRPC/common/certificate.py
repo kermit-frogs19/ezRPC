@@ -14,6 +14,11 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+_RSA_PUBLIC_EXPONENT = 65537                        # the standard RSA exponent (F4)
+_RSA_KEY_SIZE = 2048
+_VALIDITY = datetime.timedelta(days=3650)           # dev cert: ~10 years
+_BACKDATE = datetime.timedelta(days=1)              # tolerate clock skew across machines
+
 
 def generate_self_signed_cert(cert_path: str, key_path: str, *, force: bool = False) -> None:
     """Write a self-signed certificate and private key to the given paths.
@@ -22,7 +27,7 @@ def generate_self_signed_cert(cert_path: str, key_path: str, *, force: bool = Fa
     if not force and os.path.exists(cert_path) and os.path.exists(key_path):
         return
 
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key = rsa.generate_private_key(public_exponent=_RSA_PUBLIC_EXPONENT, key_size=_RSA_KEY_SIZE)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
     now = datetime.datetime.now(datetime.timezone.utc)
     cert = (
@@ -31,8 +36,8 @@ def generate_self_signed_cert(cert_path: str, key_path: str, *, force: bool = Fa
         .issuer_name(name)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now - datetime.timedelta(days=1))
-        .not_valid_after(now + datetime.timedelta(days=3650))
+        .not_valid_before(now - _BACKDATE)
+        .not_valid_after(now + _VALIDITY)
         .add_extension(
             x509.SubjectAlternativeName([
                 x509.DNSName("localhost"),

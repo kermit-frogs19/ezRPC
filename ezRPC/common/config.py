@@ -23,6 +23,31 @@ DEFAULT_HOST: str = "127.0.0.1"
 DEFAULT_PORT: int = 8000
 DEFAULT_TIMEOUT: float = 5.0
 
+# QUIC stream ids carry their type in the low two bits; 0b00 = client-initiated
+# bidirectional — the only kind that carries a call.
+STREAM_TYPE_MASK: int = 0x3
+CLIENT_BIDI_STREAM: int = 0x0
+
+# ---- operational defaults (each overridable on the Receiver / Producer) ----
+DEFAULT_IDLE_TIMEOUT: float = 60.0                          # QUIC idle timeout, both sides
+# drain budget on shutdown: >= DEFAULT_TIMEOUT (covers what a default client
+# still waits for), well under supervisor kill windows (~30s)
+DEFAULT_SHUTDOWN_GRACE: float = 5.0
+DEFAULT_MAX_REQUEST_BYTES: int = 8 * 1024 * 1024
+DEFAULT_MAX_BACKGROUND_CALLS: int = 1000
+DEFAULT_IDEMPOTENCY_TTL: float = 600.0
+DEFAULT_IDEMPOTENCY_MAX_ENTRIES: int = 10_000
+DEFAULT_IDEMPOTENCY_MAX_RESPONSE_BYTES: int = 1024 * 1024
+DEFAULT_IDEMPOTENCY_MAX_BYTES: int = 64 * 1024 * 1024
+
+# client retry backoff: RETRY_BACKOFF_BASE * 2**attempt, capped at RETRY_BACKOFF_CAP
+RETRY_BACKOFF_BASE: float = 0.05
+RETRY_BACKOFF_CAP: float = 1.0
+
+# server-side TLS session-ticket store: bounds memory; each ticket is a few
+# hundred bytes and single-use (fetched tickets are popped, an anti-replay measure)
+SESSION_TICKET_STORE_SIZE: int = 1024
+
 # ---- built-in (system) procedures ----
 DISCOVER_SYSTEM_PROCEDURE_NAME: str = ":d"
 PING_SYSTEM_PROCEDURE_NAME: str = ":p"
@@ -64,6 +89,11 @@ class CallEnvelope(msgspec.Struct, array_like=True):
     args: msgspec.Raw
     # opaque auth token, sent only when it changes on a connection (0 bytes otherwise)
     auth: str | None = None
+    # idempotency key (canonically bytes on the wire; clients encode str keys as
+    # UTF-8): same key -> the call executes to completion at most once per server
+    # process within the dedup window; duplicates replay the outcome.
+    # (array_like encoding is positional, so this field name never hits the wire)
+    idempotency_key: bytes | None = None
 
 
 class ResponseFormat(msgspec.Struct, array_like=True):
@@ -71,11 +101,6 @@ class ResponseFormat(msgspec.Struct, array_like=True):
     data: Any
     # sent only when the call was addressed by name: the id to use next time
     method_id: int | None = None
-
-
-# Types allowed for parameters and return values. bool and bytes are included
-# (both were missing in v1). None is the annotation for functions returning None.
-SUPPORTED_TYPES: tuple = (int, float, str, bool, bytes, list, tuple, dict, None)
 
 
 # ---- method-name hashing (compact first-call addressing) ----

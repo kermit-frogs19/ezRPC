@@ -1,35 +1,20 @@
-FROM python:3.12
+FROM python:3.12-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-
-# Install OS dependencies (openssl needed for certs, net-tools for testing)
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libssl-dev \
-    net-tools \
-    iputils-ping \
-    certbot \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set work directory
 WORKDIR /app
 
+# Install the package; dependencies resolve from pyproject.toml
+COPY pyproject.toml README.md LICENSE ./
+COPY ezRPC ./ezRPC
+RUN pip install --no-cache-dir .
 
-# Copy requirements
-COPY requirements.txt .
+COPY main.py example.py ./
 
-# Install Python deps
-RUN pip install --no-cache-dir -r requirements.txt
+# Bind on all interfaces inside the container; QUIC runs over UDP
+ENV EZRPC_HOST=0.0.0.0 \
+    EZRPC_PORT=8000
+EXPOSE 8000/udp
 
-# Copy app code
-COPY . .
-
-
-# Expose UDP port used by QUIC
-EXPOSE 8080/udp
-
-# Run your QUIC server
 CMD ["python", "main.py"]

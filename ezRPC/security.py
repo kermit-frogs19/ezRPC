@@ -45,7 +45,7 @@ class BasicAuth:
     ``verify(user, password)`` callable returning a truthy principal or None.
     """
 
-    def __init__(self, verify: Callable = None, users: dict = None):
+    def __init__(self, verify: Callable | None = None, users: dict | None = None):
         if (verify is None) == (users is None):
             raise ValueError("BasicAuth needs exactly one of verify= or users=")
         self._verify = verify

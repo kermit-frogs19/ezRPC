@@ -1,3 +1,5 @@
+import logging as _logging
+
 from ezRPC.receiver.receiver import Receiver
 from ezRPC.producer.producer import Producer
 from ezRPC.security import Security, BasicAuth, BearerAuth, JWTAuth
@@ -10,6 +12,9 @@ from ezRPC.common.exceptions import (
     EzRPCError, TransportError, CallTimeoutError, CallError,
     ArgumentError, ProcedureNameError, ProcedureRunError, AuthError,
 )
+
+# library convention: emit nothing unless the application configures logging
+_logging.getLogger("ezrpc").addHandler(_logging.NullHandler())
 
 __all__ = [
     "Receiver", "Producer",
